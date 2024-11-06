@@ -4,10 +4,11 @@ import "leaflet/dist/leaflet.css";
 import leaflet from "leaflet";
 import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
+import { Board } from "./board.ts";
 
-const initialLng = 36.98949379578401;
-const initialLat = -122.06277128548504;
-const initialLocation = leaflet.latLng(initialLng, initialLat);
+const oakesLat = 36.98949379578401;
+const oakesLng = -122.06277128548504;
+const oakesLocation = leaflet.latLng(oakesLat, oakesLng);
 
 const zoomLevel = 19;
 const tileDegrees = 1e-4;
@@ -15,7 +16,7 @@ const neighborhoodSize = 8;
 const cacheSpawnChance = 0.1;
 
 const map = leaflet.map(document.getElementById("map")!, {
-  center: initialLocation,
+  center: oakesLocation,
   zoom: zoomLevel,
   minZoom: zoomLevel,
   maxZoom: zoomLevel,
@@ -29,80 +30,61 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
 }).addTo(map);
 
-const player = leaflet.marker(initialLocation);
+const player = leaflet.marker(oakesLocation);
 player.bindTooltip("Here you are!");
 player.addTo(map);
 
-let playerCoins = 0;
+const playerInventory: Cache = { coins: [] };
+const playerCoins = 0;
 const statusArea = document.querySelector<HTMLDivElement>("#statusArea")!;
 statusArea.innerHTML = `${playerCoins} coins gained`;
 
+const globe = new Board(tileDegrees, neighborhoodSize);
+
 interface Cache {
+  coins: Coin[];
+}
+
+interface Coin {
   i: number;
   j: number;
+  serial: number;
 }
 
-function cacheToString(cache: Cache) {
-  return `i:${cache.i}, j:${cache.j}`;
-}
-
-const cacheMap: Map<string, number> = new Map<string, number>();
-
-function updateMapNumberElement(
-  map: Map<string, number>,
-  cacheString: string,
-  change: number,
-): number {
-  let returnable: number | undefined = map.get(cacheString);
-  if (returnable === undefined) {
-    map.set(cacheString, change);
-    returnable = map.get(cacheString);
-  } else {
-    map.set(cacheString, returnable + change);
-    returnable = map.get(cacheString);
-  }
-  if (returnable === undefined) {
-    returnable = 0;
-  }
-  return returnable;
+function coinToString(coin: Coin): string {
+  return `${coin.i}:${coin.j}#${coin.serial}`;
 }
 
 function makeCache(i: number, j: number) {
-  const origin = initialLocation;
-  const boundaries = leaflet.latLngBounds([
-    [origin.lat + i * tileDegrees, origin.lng + j * tileDegrees],
-    [origin.lat + (i + 1) * tileDegrees, origin.lng + (j + 1) * tileDegrees],
-  ]);
+  const thisCell = globe.getCellForPoint(leaflet.latLng(i, j));
+  const thisCellBounds = globe.getCellBounds(thisCell);
+  const newCache: Cache = { coins: [] };
+  for (
+    let serial = 0;
+    serial < Math.floor(luck([i, j, "initialValue"].toString()) * 100);
+    serial++
+  ) {
+    newCache.coins.push({ i: i, j: j, serial: serial });
+  }
 
-  const rect = leaflet.rectangle(boundaries);
+  const rect = leaflet.rectangle(thisCellBounds);
   rect.addTo(map);
 
   rect.bindPopup(() => {
-    const newCache: string = cacheToString({ i: i, j: j });
-    let cacheCoins: number = 0;
-    if (cacheMap.get(newCache) === undefined) {
-      cacheCoins = updateMapNumberElement(
-        cacheMap,
-        newCache,
-        Math.floor(luck([i, j, "initialValue"].toString()) * 100),
-      );
-    } else {
-      cacheCoins = updateMapNumberElement(cacheMap, newCache, 0);
-    }
-
     const popupDisplay = document.createElement("div");
     popupDisplay.innerHTML =
-      `<div>Cache at "${i},${j}" with a value of <span id="value">${cacheCoins}</span>.</div><button id="collect">collect</button></span>.</div><button id="deposit">deposit</button>`;
+      `<div>Cache at "${i},${j}" with a value of <span id="value">${newCache.coins.length}</span>.</div><button id="collect">collect</button></span>.</div><button id="deposit">deposit</button>`;
 
     popupDisplay.querySelector<HTMLButtonElement>("#collect")!.addEventListener(
       "click",
       () => {
-        if (cacheCoins > 0) {
-          cacheCoins = updateMapNumberElement(cacheMap, newCache, -1);
+        if (newCache.coins.length > 0) {
+          const coin: Coin = newCache.coins.pop()!;
           popupDisplay.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-            cacheCoins.toString();
-          playerCoins++;
-          statusArea.innerHTML = `${playerCoins} coins gained`;
+            newCache.coins.length.toString();
+          playerInventory.coins.push(coin);
+          statusArea.innerHTML = `${playerInventory.coins.length} coins gained`;
+          console.log(coinToString(coin));
         }
       },
     );
@@ -110,12 +92,13 @@ function makeCache(i: number, j: number) {
     popupDisplay.querySelector<HTMLButtonElement>("#deposit")!.addEventListener(
       "click",
       () => {
-        if (playerCoins > 0) {
-          cacheCoins = updateMapNumberElement(cacheMap, newCache, 1);
+        if (playerInventory.coins.length > 0) {
+          const coin: Coin = playerInventory.coins.pop()!;
+          statusArea.innerHTML = `${playerInventory.coins.length} coins gained`;
+          newCache.coins.push(coin);
           popupDisplay.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-            cacheCoins.toString();
-          playerCoins--;
-          statusArea.innerHTML = `${playerCoins} coins gained`;
+            newCache.coins.length.toString();
+          console.log(coinToString(coin));
         }
       },
     );
@@ -124,10 +107,9 @@ function makeCache(i: number, j: number) {
   });
 }
 
-for (let i = -neighborhoodSize; i < neighborhoodSize; i++) {
-  for (let j = -neighborhoodSize; j < neighborhoodSize; j++) {
-    if (luck([i, j, initialLng, initialLat].toString()) < cacheSpawnChance) {
-      makeCache(i, j);
-    }
+const startingZone = globe.getCellsNearPoint(oakesLocation);
+for (const cell of startingZone) {
+  if (luck([cell.i, cell.j].toString()) < cacheSpawnChance) {
+    makeCache(cell.i / tileDegrees, cell.j / tileDegrees);
   }
 }
