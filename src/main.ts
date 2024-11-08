@@ -6,8 +6,8 @@ import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
 import { Board } from "./board.ts";
 
-const oakesLat = 36.98949379578401;
-const oakesLng = -122.06277128548504;
+const oakesLat = 36.9894;
+const oakesLng = -122.0627;
 const oakesLocation = leaflet.latLng(oakesLat, oakesLng);
 
 const zoomLevel = 19;
@@ -34,16 +34,38 @@ const player = leaflet.marker(oakesLocation);
 player.bindTooltip("Here you are!");
 player.addTo(map);
 
-const playerInventory: Cache = { coins: [] };
+const globe = new Board(tileDegrees, neighborhoodSize);
+
+interface Memento<T> {
+  toMemento(): T;
+  fromMemento(memento: T): void;
+}
+
+interface Cache {
+  key: string;
+  coins: Coin[];
+}
+
+class Cache implements Memento<string> {
+  constructor() {
+    this.coins = [];
+    this.key = "null";
+  }
+  toMemento() {
+    return JSON.stringify(this.coins);
+  }
+
+  fromMemento(memento: string) {
+    this.coins = JSON.parse(memento);
+  }
+}
+
+const cacheTracker: Map<string, string> = new Map<string, string>();
+
+const playerInventory: Cache = new Cache();
 const playerCoins = 0;
 const statusArea = document.querySelector<HTMLDivElement>("#statusArea")!;
 statusArea.innerHTML = `${playerCoins} coins gained`;
-
-const globe = new Board(tileDegrees, neighborhoodSize);
-
-interface Cache {
-  coins: Coin[];
-}
 
 interface Coin {
   i: number;
@@ -56,15 +78,23 @@ function coinToString(coin: Coin): string {
 }
 
 function makeCache(i: number, j: number) {
+  i = Math.round(i);
+  j = Math.round(j);
   const thisCell = globe.getCellForPoint(leaflet.latLng(i, j));
   const thisCellBounds = globe.getCellBounds(thisCell);
-  const newCache: Cache = { coins: [] };
-  for (
-    let serial = 0;
-    serial < Math.floor(luck([i, j, "initialValue"].toString()) * 100);
-    serial++
-  ) {
-    newCache.coins.push({ i: i, j: j, serial: serial });
+  const newCache: Cache = new Cache();
+  newCache.key = [thisCell.i, thisCell.j].toString();
+  if (cacheTracker.get(newCache.key) === undefined) {
+    for (
+      let serial = 0;
+      serial < Math.floor(luck([i, j, "initialValue"].toString()) * 100);
+      serial++
+    ) {
+      newCache.coins.push({ i: i, j: j, serial: serial });
+    }
+    cacheTracker.set(newCache.key, newCache.toMemento());
+  } else {
+    newCache.fromMemento(cacheTracker.get(newCache.key)!);
   }
 
   const rect = leaflet.rectangle(thisCellBounds);
@@ -84,6 +114,7 @@ function makeCache(i: number, j: number) {
             newCache.coins.length.toString();
           playerInventory.coins.push(coin);
           statusArea.innerHTML = `${playerInventory.coins.length} coins gained`;
+          cacheTracker.set(newCache.key, newCache.toMemento());
           console.log(coinToString(coin));
         }
       },
@@ -98,6 +129,7 @@ function makeCache(i: number, j: number) {
           newCache.coins.push(coin);
           popupDisplay.querySelector<HTMLSpanElement>("#value")!.innerHTML =
             newCache.coins.length.toString();
+          cacheTracker.set(newCache.key, newCache.toMemento());
           console.log(coinToString(coin));
         }
       },
@@ -107,9 +139,65 @@ function makeCache(i: number, j: number) {
   });
 }
 
-const startingZone = globe.getCellsNearPoint(oakesLocation);
-for (const cell of startingZone) {
-  if (luck([cell.i, cell.j].toString()) < cacheSpawnChance) {
-    makeCache(cell.i / tileDegrees, cell.j / tileDegrees);
+function wipeRectangles() {
+  map.eachLayer((layer: leaflet.layer) => {
+    if (layer === player || layer instanceof leaflet.TileLayer) {
+      return;
+    }
+    map.removeLayer(layer);
+  });
+}
+
+function generateNeighborhood(point: leaflet.LatLng) {
+  wipeRectangles();
+  const neighborhoodCells = globe.getCellsNearPoint(point);
+  for (const cell of neighborhoodCells) {
+    if (luck([cell.i, cell.j].toString()) < cacheSpawnChance) {
+      makeCache(cell.i / tileDegrees, cell.j / tileDegrees);
+    }
   }
 }
+
+generateNeighborhood(oakesLocation);
+
+function movePlayer(latStep: number, lngStep: number) {
+  const currentLatLng = player.getLatLng();
+  player.setLatLng(
+    leaflet.latLng(
+      currentLatLng.lat + (tileDegrees * latStep),
+      currentLatLng.lng + (tileDegrees * lngStep),
+    ),
+  );
+  map.setView(
+    leaflet.latLng(
+      currentLatLng.lat + (tileDegrees * latStep),
+      currentLatLng.lng + (tileDegrees * lngStep),
+    ),
+  );
+  generateNeighborhood(
+    leaflet.latLng(
+      currentLatLng.lat + (tileDegrees * latStep),
+      currentLatLng.lng + (tileDegrees * lngStep),
+    ),
+  );
+}
+
+const northButton = document.getElementById("north") as HTMLButtonElement;
+northButton.addEventListener("click", () => {
+  movePlayer(1, 0);
+});
+
+const southButton = document.getElementById("south") as HTMLButtonElement;
+southButton.addEventListener("click", () => {
+  movePlayer(-1, 0);
+});
+
+const eastButton = document.getElementById("east") as HTMLButtonElement;
+eastButton.addEventListener("click", () => {
+  movePlayer(0, 1);
+});
+
+const westButton = document.getElementById("west") as HTMLButtonElement;
+westButton.addEventListener("click", () => {
+  movePlayer(0, -1);
+});

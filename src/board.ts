@@ -46,6 +46,14 @@ export class Board {
   getCellsNearPoint(point: leaflet.LatLng): Cell[] {
     const resultCells: Cell[] = [];
     const originCell = this.getCellForPoint(point);
+    const tileWidthString = this.tileWidth.toString();
+    const parts = tileWidthString.split(".");
+    let trailingDigits = 1;
+    if (parts.length > 1) {
+      trailingDigits = parts[1].length;
+    } else {
+      trailingDigits = 0;
+    }
     for (
       let x = -this.tileVisibilityRadius;
       x < this.tileVisibilityRadius;
@@ -59,8 +67,8 @@ export class Board {
         resultCells.push(
           this.getCellForPoint(
             leaflet.latLng(
-              originCell.i + (x * this.tileWidth),
-              originCell.j + (y * this.tileWidth),
+              (originCell.i + (x * this.tileWidth)).toFixed(trailingDigits),
+              (originCell.j + (y * this.tileWidth)).toFixed(trailingDigits),
             ),
           ),
         );
