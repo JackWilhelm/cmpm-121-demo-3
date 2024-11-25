@@ -194,8 +194,12 @@ generateNeighborhood(oakesLat, oakesLng);
 
 let geoLocationOn = false;
 
-function success(_pos: GeolocationPosition) {
-  playerMovement(0, 0);
+function success(pos: GeolocationPosition) {
+  const [currentLat, currentLng] = mapManager.getPlayerLocation();
+  playerMovement(
+    (pos.coords.latitude - currentLat) / tileDegrees,
+    (pos.coords.longitude - currentLng) / tileDegrees,
+  );
 }
 
 let watcher = navigator.geolocation.watchPosition(success, undefined, {
