@@ -26,7 +26,8 @@ export class Board {
     return this.knownCells.get(key)!;
   }
 
-  getCellForPoint(point: leaflet.LatLng): Cell {
+  getCellForPoint(i: number, j: number): Cell {
+    const point = leaflet.latLng(i, j);
     return this.getCanonicalCell({
       i: point.lat,
       j: point.lng,
@@ -43,9 +44,9 @@ export class Board {
     ));
   }
 
-  getCellsNearPoint(point: leaflet.LatLng): Cell[] {
+  getCellsNearPoint(i: number, j: number): Cell[] {
     const resultCells: Cell[] = [];
-    const originCell = this.getCellForPoint(point);
+    const originCell = this.getCellForPoint(i, j);
     const tileWidthString = this.tileWidth.toString();
     const parts = tileWidthString.split(".");
     let trailingDigits = 1;
@@ -66,8 +67,10 @@ export class Board {
       ) {
         resultCells.push(
           this.getCellForPoint(
-            leaflet.latLng(
+            parseFloat(
               (originCell.i + (x * this.tileWidth)).toFixed(trailingDigits),
+            ),
+            parseFloat(
               (originCell.j + (y * this.tileWidth)).toFixed(trailingDigits),
             ),
           ),
