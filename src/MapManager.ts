@@ -6,7 +6,8 @@ export class MapManager {
   private map: leaflet.Map;
   private playerMarker: leaflet.Marker;
 
-  constructor(initialLocation: leaflet.LatLng, zoomLevel: number) {
+  constructor(lat: number, lng: number, zoomLevel: number) {
+    const initialLocation = leaflet.latLng(lat, lng);
     this.map = leaflet.map(document.getElementById("map")!, {
       center: initialLocation,
       zoom: zoomLevel,
@@ -57,6 +58,16 @@ export class MapManager {
     return [playerPos.lat, playerPos.lng];
   }
 
+  bindPopupEvents(onPopupOpen: () => void, onPopupClose: () => void): void {
+    this.map.on("popupopen", () => {
+      onPopupOpen();
+    });
+
+    this.map.on("popupclose", () => {
+      onPopupClose();
+    });
+  }
+
   drawCache(
     i: number,
     j: number,
@@ -98,5 +109,13 @@ export class MapManager {
 
       return popupDisplay;
     });
+  }
+
+  addPlayerMovementPolyline(history: number[][]): void {
+    const polyline = leaflet.polyline(
+      history.map(([lat, lng]) => leaflet.latLng(lat, lng)),
+      { color: "red" },
+    );
+    polyline.addTo(this.map);
   }
 }

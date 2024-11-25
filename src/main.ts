@@ -1,39 +1,18 @@
 // todo
 import "./style.css";
-import "leaflet/dist/leaflet.css";
-import leaflet from "leaflet";
-import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
 import { Board } from "./board.ts";
 import { MapManager } from "./MapManager.ts";
 
 const oakesLat = 36.9894;
 const oakesLng = -122.0627;
-const oakesLocation = leaflet.latLng(oakesLat, oakesLng);
 
 const zoomLevel = 19;
 const tileDegrees = 1e-4;
 const neighborhoodSize = 8;
 const cacheSpawnChance = 0.1;
 
-/*const map = leaflet.map(document.getElementById("map")!, {
-  center: oakesLocation,
-  zoom: zoomLevel,
-  minZoom: zoomLevel,
-  maxZoom: zoomLevel,
-  zoomControl: false,
-  scrollWheelZoom: false,
-});
-
-leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution:
-    '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-}).addTo(map);
-
-const player = leaflet.marker(oakesLocation);
-player.bindTooltip("Here you are!");
-player.addTo(map);*/
+const mapManager = new MapManager(oakesLat, oakesLng, zoomLevel);
 
 let playerMovementHistory: number[][] = [];
 const playerMovementHistoryString = localStorage.getItem(
@@ -47,10 +26,9 @@ localStorage.setItem(
   "playerMovementHistory",
   JSON.stringify(playerMovementHistory),
 );
+mapManager.addPlayerMovementPolyline(playerMovementHistory);
 
 const globe = new Board(tileDegrees, neighborhoodSize);
-
-const mapManager = new MapManager(oakesLocation, zoomLevel);
 
 interface Memento<T> {
   toMemento(): T;
@@ -114,14 +92,6 @@ function updateCoinDisplay() {
     coinText.style.cursor = "pointer";
 
     coinText.addEventListener("click", () => {
-      /*
-      map.setView(
-        leaflet.latLng(
-          coin.i * tileDegrees,
-          coin.j * tileDegrees,
-        ),
-      );
-      */
       mapManager.setView(coin.i * tileDegrees, coin.j * tileDegrees);
     });
 
@@ -142,39 +112,6 @@ interface Coin {
 function coinToString(coin: Coin): string {
   return `${coin.i}:${coin.j}#${coin.serial}`;
 }
-
-/*function movePlayer(
-  currentLatLng: leaflet.LatLng,
-  latStep: number,
-  lngStep: number,
-) {
-  playerMovementHistory.push([
-    currentLatLng.lat + (tileDegrees * latStep),
-    currentLatLng.lng + (tileDegrees * lngStep),
-  ]);
-  player.setLatLng(
-    leaflet.latLng(
-      currentLatLng.lat + (tileDegrees * latStep),
-      currentLatLng.lng + (tileDegrees * lngStep),
-    ),
-  );
-  map.setView(
-    leaflet.latLng(
-      currentLatLng.lat + (tileDegrees * latStep),
-      currentLatLng.lng + (tileDegrees * lngStep),
-    ),
-  );
-  generateNeighborhood(
-    leaflet.latLng(
-      currentLatLng.lat + (tileDegrees * latStep),
-      currentLatLng.lng + (tileDegrees * lngStep),
-    ),
-  );
-  localStorage.setItem(
-    "playerMovementHistory",
-    JSON.stringify(playerMovementHistory),
-  );
-}*/
 
 function makeCache(mapManager: MapManager, i: number, j: number) {
   i = Math.round(i);
@@ -228,97 +165,21 @@ function makeCache(mapManager: MapManager, i: number, j: number) {
     },
   );
 }
-/*
-function makeCache(i: number, j: number) {
-  i = Math.round(i);
-  j = Math.round(j);
-  const thisCell = globe.getCellForPoint(leaflet.latLng(i, j));
-  const thisCellBounds = globe.getCellBounds(thisCell);
-  const newCache: Cache = new Cache();
-  newCache.key = [thisCell.i, thisCell.j].toString();
-  if (cacheTracker.get(newCache.key) === undefined) {
-    for (
-      let serial = 0;
-      serial < Math.floor(luck([i, j, "initialValue"].toString()) * 100);
-      serial++
-    ) {
-      newCache.coins.push({ i: i, j: j, serial: serial });
+
+mapManager.bindPopupEvents(
+  () => {
+    if (geoLocationOn) {
+      navigator.geolocation.clearWatch(watcher);
     }
-    cacheTracker.set(newCache.key, newCache.toMemento());
-    saveCacheTracker(cacheTracker);
-  } else {
-    newCache.fromMemento(cacheTracker.get(newCache.key)!);
-  }
-
-  const rect = leaflet.rectangle(thisCellBounds);
-  rect.addTo(map);
-
-  rect.bindPopup(() => {
-    const popupDisplay = document.createElement("div");
-    popupDisplay.innerHTML =
-      `<div>Cache at "${i},${j}" with a value of <span id="value">${newCache.coins.length}</span>.</div><button id="collect">collect</button></span>.</div><button id="deposit">deposit</button>`;
-
-    popupDisplay.querySelector<HTMLButtonElement>("#collect")!.addEventListener(
-      "click",
-      () => {
-        if (newCache.coins.length > 0) {
-          const coin: Coin = newCache.coins.pop()!;
-          cacheTracker.set(newCache.key, newCache.toMemento());
-          saveCacheTracker(cacheTracker);
-          popupDisplay.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-            newCache.coins.length.toString();
-          playerInventory.coins.push(coin);
-          updateStatusArea();
-          updateCoinDisplay();
-          localStorage.setItem("playerInventory", playerInventory.toMemento());
-        }
-      },
-    );
-
-    popupDisplay.querySelector<HTMLButtonElement>("#deposit")!.addEventListener(
-      "click",
-      () => {
-        if (playerInventory.coins.length > 0) {
-          const coin: Coin = playerInventory.coins.pop()!;
-          localStorage.setItem("playerInventory", playerInventory.toMemento());
-          updateStatusArea();
-          updateCoinDisplay();
-          newCache.coins.push(coin);
-          popupDisplay.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-            newCache.coins.length.toString();
-          cacheTracker.set(newCache.key, newCache.toMemento());
-          saveCacheTracker(cacheTracker);
-        }
-      },
-    );
-
-    return popupDisplay;
-  });
-}*/
-/*
-map.on("popupopen", () => {
-  if (geoLocationOn) {
-    navigator.geolocation.clearWatch(watcher);
-  }
-});
-
-map.on("popupclose", () => {
-  if (geoLocationOn) {
-    watcher = navigator.geolocation.watchPosition(success);
-  }
-});*/
-/*
-function wipeRectangles() {
-  map.eachLayer((layer: leaflet.layer) => {
-    if (layer === player || layer instanceof leaflet.TileLayer) {
-      return;
+  },
+  () => {
+    if (geoLocationOn) {
+      watcher = navigator.geolocation.watchPosition(success);
     }
-    map.removeLayer(layer);
-  });
-}*/
+  },
+);
 
 function generateNeighborhood(i: number, j: number) {
-  //wipeRectangles();
   mapManager.wipeOverlays();
   const neighborhoodCells = globe.getCellsNearPoint(i, j);
   for (const cell of neighborhoodCells) {
@@ -326,7 +187,7 @@ function generateNeighborhood(i: number, j: number) {
       makeCache(mapManager, cell.i / tileDegrees, cell.j / tileDegrees);
     }
   }
-  //leaflet.polyline(playerMovementHistory, { color: "red" }).addTo(map);
+  mapManager.addPlayerMovementPolyline(playerMovementHistory);
 }
 
 generateNeighborhood(oakesLat, oakesLng);
@@ -334,10 +195,7 @@ generateNeighborhood(oakesLat, oakesLng);
 let geoLocationOn = false;
 
 function success(_pos: GeolocationPosition) {
-  mapManager.movePlayer(0, 0, tileDegrees);
-  const [playerLat, playerLng] = mapManager.getPlayerLocation();
-  generateNeighborhood(playerLat, playerLng);
-  //movePlayer(leaflet.latLng(pos.coords.latitude, pos.coords.longitude), 0, 0);
+  playerMovement(0, 0);
 }
 
 let watcher = navigator.geolocation.watchPosition(success, undefined, {
@@ -349,40 +207,28 @@ navigator.geolocation.clearWatch(watcher);
 const northButton = document.getElementById("north") as HTMLButtonElement;
 northButton.addEventListener("click", () => {
   if (!geoLocationOn) {
-    mapManager.movePlayer(1, 0, tileDegrees);
-    const [playerLat, playerLng] = mapManager.getPlayerLocation();
-    generateNeighborhood(playerLat, playerLng);
-    //movePlayer(player.getLatLng(), 1, 0);
+    playerMovement(1, 0);
   }
 });
 
 const southButton = document.getElementById("south") as HTMLButtonElement;
 southButton.addEventListener("click", () => {
   if (!geoLocationOn) {
-    mapManager.movePlayer(-1, 0, tileDegrees);
-    const [playerLat, playerLng] = mapManager.getPlayerLocation();
-    generateNeighborhood(playerLat, playerLng);
-    //movePlayer(player.getLatLng(), -1, 0);
+    playerMovement(-1, 0);
   }
 });
 
 const eastButton = document.getElementById("east") as HTMLButtonElement;
 eastButton.addEventListener("click", () => {
   if (!geoLocationOn) {
-    mapManager.movePlayer(0, 1, tileDegrees);
-    const [playerLat, playerLng] = mapManager.getPlayerLocation();
-    generateNeighborhood(playerLat, playerLng);
-    //movePlayer(player.getLatLng(), 0, 1);
+    playerMovement(0, 1);
   }
 });
 
 const westButton = document.getElementById("west") as HTMLButtonElement;
 westButton.addEventListener("click", () => {
   if (!geoLocationOn) {
-    mapManager.movePlayer(0, -1, tileDegrees);
-    const [playerLat, playerLng] = mapManager.getPlayerLocation();
-    generateNeighborhood(playerLat, playerLng);
-    //movePlayer(player.getLatLng(), 0, -1);
+    playerMovement(0, -1);
   }
 });
 
@@ -406,11 +252,19 @@ resetButton.addEventListener("click", () => {
     playerInventory = new Cache();
     cacheTracker = new Map<string, string>();
     playerMovementHistory = [];
-    mapManager.movePlayer(0, 0, tileDegrees);
-    const [playerLat, playerLng] = mapManager.getPlayerLocation();
-    generateNeighborhood(playerLat, playerLng);
-    //movePlayer(player.getLatLng(), 0, 0);
+    playerMovement(0, 0);
     updateStatusArea();
     updateCoinDisplay();
   }
 });
+
+function playerMovement(latStep: number, lngStep: number) {
+  mapManager.movePlayer(latStep, lngStep, tileDegrees);
+  playerMovementHistory.push(mapManager.getPlayerLocation());
+  const [playerLat, playerLng] = mapManager.getPlayerLocation();
+  generateNeighborhood(playerLat, playerLng);
+  localStorage.setItem(
+    "playerMovementHistory",
+    JSON.stringify(playerMovementHistory),
+  );
+}
